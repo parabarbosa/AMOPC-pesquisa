@@ -204,247 +204,205 @@
     </div>
 
     <script>
-        const API_TOKEN = "OQ37i9fNtS532OE_GSTzFZBqm4HFUw3apY2K1hYX";
-        let currentVideoId = '7xeoJnTJNbk';
-        const TABLE_ID = 'moficvyqo7141sg';
-        let allRecords = [];
-        
-        // Função para carregar os dados da base ao iniciar a aplicação
-        window.onload = async function() {
-            try {
-                await loadDatabaseInfo();
-            } catch (error) {
-                console.error('Erro ao carregar informações da base de dados:', error);
-                document.getElementById('db-status').textContent = 'Erro na conexão';
-                document.getElementById('total-records').textContent = 'N/A';
-                document.getElementById('last-update').textContent = 'N/A';
-            }
-            
-            // Verificar se há parâmetros de busca na URL
-            const params = new URLSearchParams(window.location.search);
-            const query = params.get('q');
-            if (query) {
-                document.getElementById('search-terms').value = query;
-                searchNocoDB();
-            }
-        }
+  const API_TOKEN = "OQ37i9fNtS532OE_GSTzFZBqm4HFUw3apY2K1hYX";
+let currentVideoId = '7xeoJnTJNbk';
+const TABLE_ID = 'moficvyqo7141sg';
 
-      // Função para carregar informações da base de dados
+// Função para carregar informações básicas da base de dados
 async function loadDatabaseInfo() {
-    const url = `https://app.nocodb.com/api/v2/tables/${TABLE_ID}/records`;
-    let allRecords = [];
-    let currentPage = 1;
-    let hasMorePages = true;
-    const pageSize = 100; // Tamanho da página máximo permitido pelo NocoDB
+    const url = `https://app.nocodb.com/api/v2/tables/${TABLE_ID}/records?limit=1`;
     
-    document.getElementById('db-status').textContent = 'Carregando dados...';
+    document.getElementById('db-status').textContent = 'Verificando conexão...';
     
     try {
-        // Loop para buscar todas as páginas
-        while (hasMorePages) {
-            const paginatedUrl = `${url}?limit=${pageSize}&offset=${(currentPage - 1) * pageSize}`;
-            
-            const response = await fetch(paginatedUrl, {
-                method: 'GET',
-                headers: {
-                    'xc-token': API_TOKEN,
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Erro HTTP ${response.status}`);
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'xc-token': API_TOKEN,
+                'Content-Type': 'application/json'
             }
-            
-            const data = await response.json();
-            const pageRecords = data.data || data.list || [];
-            
-            // Adicionar registros desta página ao array total
-            allRecords = allRecords.concat(pageRecords);
-            
-            // Verificar se esta é a última página
-            if (pageRecords.length < pageSize) {
-                hasMorePages = false;
-            } else {
-                currentPage++;
-            }
-            
-            // Atualizar status de carregamento
-            document.getElementById('db-status').textContent = `Carregando... (${allRecords.length} registros)`;
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Erro HTTP ${response.status}`);
         }
         
-        // Atualizar informações da base de dados após carregar todos os registros
-        document.getElementById('total-records').textContent = allRecords.length;
+        const data = await response.json();
+        const totalRecords = data.pageInfo.totalRows || 'N/A';
+        
+        document.getElementById('total-records').textContent = totalRecords;
         document.getElementById('db-status').textContent = 'Conectado';
         document.getElementById('last-update').textContent = new Date().toLocaleString();
-        
-        return allRecords;
     } catch (error) {
-        console.error('Erro ao carregar dados:', error);
+        console.error('Erro ao carregar informações:', error);
         document.getElementById('db-status').textContent = 'Erro: ' + error.message;
-        throw error;
+        document.getElementById('total-records').textContent = 'N/A';
+        document.getElementById('last-update').textContent = 'N/A';
     }
 }
 
-        // Função para extrair timestamp da URL
-        function extractTimestamp(url) {
-            if (!url) return 0;
-            
-            // Captura parâmetros t= ou start=
-            const match = url.match(/[?&](t|start)=(\d+)/);
-            if (match) return parseInt(match[2]);
-            
-            // Captura formato t=1m30s
-            const timeMatch = url.match(/[?&]t=(\d+m)?(\d+s?)/);
-            if (timeMatch) {
-                const minutes = parseInt(timeMatch[1]) || 0;
-                const seconds = parseInt(timeMatch[2]) || 0;
-                return (minutes * 60) + seconds;
+// Função de pesquisa otimizada usando filtros da API do NocoDB
+async function searchNocoDB() {
+    const searchTerms = document.getElementById('search-terms').value.trim();
+    if (!searchTerms) {
+        alert("Por favor, digite um termo de pesquisa.");
+        return;
+    }
+
+    const searchArray = searchTerms.toLowerCase().split(/\s+/);
+    const resultsList = document.getElementById('results-list');
+    resultsList.innerHTML = '<li>Pesquisando...</li>';
+
+    try {
+        // Construir o filtro 'where' para buscar na coluna Transcrição
+        // Usamos o operador ~ (LIKE) para buscar substring
+        const whereClause = searchArray.map(term => `(Transcrição,like,%${term}%)`).join('~and~');
+        const url = `https://app.nocodb.com/api/v2/tables/${TABLE_ID}/records?where=${encodeURIComponent(whereClause)}&limit=100`;
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'xc-token': API_TOKEN,
+                'Content-Type': 'application/json'
             }
-            
-            return 0;
-        }
-
-        function extractVideoId(url) {
-            if (!url) return '';
-            const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-            const match = url.match(regex);
-            return match ? match[1] : '';
-        }
-
-        async function searchNocoDB() {
-            const searchTerms = document.getElementById('search-terms').value.trim();
-            if (!searchTerms) {
-                alert("Por favor, digite um termo de pesquisa.");
-                return;
-            }
-
-            const searchArray = searchTerms.toLowerCase().split(/\s+/);
-            const resultsList = document.getElementById('results-list');
-            resultsList.innerHTML = '<li>Pesquisando...</li>';
-
-            try {
-                // Usar os registros já carregados ou carregar novamente se necessário
-                let records = allRecords;
-                if (records.length === 0) {
-                    records = await loadDatabaseInfo();
-                }
-
-                resultsList.innerHTML = '';
-
-                if (records.length === 0) {
-                    resultsList.innerHTML = '<li>Nenhum registro encontrado na base de dados.</li>';
-                    return;
-                }
-
-                const results = records.filter(record => {
-                    const transcription = (record.Transcrição || '').toLowerCase();
-                    return searchArray.every(term => transcription.includes(term));
-                }).map(record => ({
-                    transcription: record.Transcrição,
-                    videoTitle: record["Titulo - Video"] || record.cdbm64cf0u4hnrx,
-                    urlLink: record.URL_LINK,
-                    timestamp: record.Timestamp
-                }));
-
-                if (results.length === 0) {
-                    resultsList.innerHTML = '<li>Nenhum resultado encontrado para os termos pesquisados.</li>';
-                    return;
-                }
-
-                results.forEach(result => {
-                    const listItem = document.createElement('li');
-                    listItem.className = 'result-item';
-
-                    // Processar dados do link
-                    const videoId = extractVideoId(result.urlLink);
-                    const urlTimestamp = extractTimestamp(result.urlLink);
-                    const listTimestamp = convertTimestampToSeconds(result.timestamp);
-
-                    // Construir conteúdo
-                    let content = `
-                        <div class="video-title-container">
-                            <span class="video-title">${result.videoTitle || 'Vídeo sem título'}</span>
-                            ${result.urlLink ? `
-                                <span class="video-link" 
-                                    onclick="loadVideo('${videoId}', ${urlTimestamp})">
-                                    ${result.urlLink}
-                                </span>
-                            ` : ''}
-                        </div>
-                    `;
-
-                    if (result.timestamp) {
-                        content += `
-                            <span class="timestamp" 
-                                onclick="seekVideo('${videoId}', ${listTimestamp})">
-                                ${result.timestamp}
-                            </span>
-                        `;
-                    }
-
-                    // Destacar termos de pesquisa
-                    content += highlightText(result.transcription, searchArray);
-                    
-                    listItem.innerHTML = content;
-                    resultsList.appendChild(listItem);
-                });
-
-                resultsList.insertAdjacentHTML('beforebegin', 
-                    `<p>Encontrados ${results.length} resultados em ${records.length} registros.</p>`);
-
-            } catch (error) {
-                console.error('Erro:', error);
-                resultsList.innerHTML = `<li>Erro na pesquisa: ${error.message}</li>`;
-            }
-        }
-
-        function highlightText(text, terms) {
-            if (!text) return '';
-            
-            return terms.reduce((acc, term) => 
-                acc.replace(new RegExp(term, 'gi'), 
-                match => `<span class="highlight">${match}</span>`), 
-                text
-            );
-        }
-
-        function convertTimestampToSeconds(timestamp) {
-            if (!timestamp) return 0;
-            const parts = timestamp.split(':').map(Number);
-            return parts.length === 2 
-                ? parts[0] * 60 + parts[1] 
-                : parts[0] * 3600 + parts[1] * 60 + parts[2];
-        }
-
-        function loadVideo(videoId, timestamp = 0) {
-            if (!videoId) return;
-            
-            const player = document.getElementById('youtube-player');
-            const videoContainer = document.getElementById('video-container');
-            
-            let url = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
-            if (timestamp > 0) url += `&start=${timestamp}`;
-            
-            player.src = url;
-            currentVideoId = videoId;
-            videoContainer.scrollIntoView({ behavior: 'smooth' });
-        }
-
-        function seekVideo(videoId, seconds) {
-            const player = document.getElementById('youtube-player');
-            if (videoId !== currentVideoId) {
-                player.src = `https://www.youtube.com/embed/${videoId}?start=${seconds}`;
-                currentVideoId = videoId;
-            } else {
-                player.src = `https://www.youtube.com/embed/${currentVideoId}?start=${seconds}`;
-            }
-        }
-
-        // Event Listeners
-        document.getElementById('search-terms').addEventListener('keypress', e => {
-            if (e.key === 'Enter') searchNocoDB();
         });
+
+        if (!response.ok) {
+            throw new Error(`Erro HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const records = data.list || [];
+
+        resultsList.innerHTML = '';
+
+        if (records.length === 0) {
+            resultsList.innerHTML = '<li>Nenhum resultado encontrado para os termos pesquisados.</li>';
+            return;
+        }
+
+        const results = records.map(record => ({
+            transcription: record.Transcrição,
+            videoTitle: record["Titulo - Video"] || record.cdbm64cf0u4hnrx,
+            urlLink: record.URL_LINK,
+            timestamp: record.Timestamp
+        }));
+
+        results.forEach(result => {
+            const listItem = document.createElement('li');
+            listItem.className = 'result-item';
+
+            const videoId = extractVideoId(result.urlLink);
+            const urlTimestamp = extractTimestamp(result.urlLink);
+            const listTimestamp = convertTimestampToSeconds(result.timestamp);
+
+            let content = `
+                <div class="video-title-container">
+                    <span class="video-title">${result.videoTitle || 'Vídeo sem título'}</span>
+                    ${result.urlLink ? `
+                        <span class="video-link" 
+                            onclick="loadVideo('${videoId}', ${urlTimestamp})">
+                            ${result.urlLink}
+                        </span>
+                    ` : ''}
+                </div>
+            `;
+
+            if (result.timestamp) {
+                content += `
+                    <span class="timestamp" 
+                        onclick="seekVideo('${videoId}', ${listTimestamp})">
+                        ${result.timestamp}
+                    </span>
+                `;
+            }
+
+            content += highlightText(result.transcription, searchArray);
+            listItem.innerHTML = content;
+            resultsList.appendChild(listItem);
+        });
+
+        resultsList.insertAdjacentHTML('beforebegin', 
+            `<p>Encontrados ${results.length} resultados.</p>`);
+
+    } catch (error) {
+        console.error('Erro na pesquisa:', error);
+        resultsList.innerHTML = `<li>Erro na pesquisa: ${error.message}</li>`;
+    }
+}
+
+// Funções auxiliares permanecem iguais
+function extractTimestamp(url) {
+    if (!url) return 0;
+    const match = url.match(/[?&](t|start)=(\d+)/);
+    if (match) return parseInt(match[2]);
+    const timeMatch = url.match(/[?&]t=(\d+m)?(\d+s?)/);
+    if (timeMatch) {
+        const minutes = parseInt(timeMatch[1]) || 0;
+        const seconds = parseInt(timeMatch[2]) || 0;
+        return (minutes * 60) + seconds;
+    }
+    return 0;
+}
+
+function extractVideoId(url) {
+    if (!url) return '';
+    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    const match = url.match(regex);
+    return match ? match[1] : '';
+}
+
+function highlightText(text, terms) {
+    if (!text) return '';
+    return terms.reduce((acc, term) => 
+        acc.replace(new RegExp(term, 'gi'), 
+        match => `<span class="highlight">${match}</span>`), 
+        text
+    );
+}
+
+function convertTimestampToSeconds(timestamp) {
+    if (!timestamp) return 0;
+    const parts = timestamp.split(':').map(Number);
+    return parts.length === 2 
+        ? parts[0] * 60 + parts[1] 
+        : parts[0] * 3600 + parts[1] * 60 + parts[2];
+}
+
+function loadVideo(videoId, timestamp = 0) {
+    if (!videoId) return;
+    const player = document.getElementById('youtube-player');
+    let url = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+    if (timestamp > 0) url += `&start=${timestamp}`;
+    player.src = url;
+    currentVideoId = videoId;
+    document.getElementById('video-container').scrollIntoView({ behavior: 'smooth' });
+}
+
+function seekVideo(videoId, seconds) {
+    const player = document.getElementById('youtube-player');
+    if (videoId !== currentVideoId) {
+        player.src = `https://www.youtube.com/embed/${videoId}?start=${seconds}`;
+        currentVideoId = videoId;
+    } else {
+        player.src = `https://www.youtube.com/embed/${currentVideoId}?start=${seconds}`;
+    }
+}
+
+// Inicialização
+window.onload = function() {
+    loadDatabaseInfo();
+    const params = new URLSearchParams(window.location.search);
+    const query = params.get('q');
+    if (query) {
+        document.getElementById('search-terms').value = query;
+        searchNocoDB();
+    }
+};
+
+document.getElementById('search-terms').addEventListener('keypress', e => {
+    if (e.key === 'Enter') searchNocoDB();
+});
     </script>
 </body>
 </html>

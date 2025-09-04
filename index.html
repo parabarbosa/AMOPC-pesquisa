@@ -114,11 +114,10 @@
         }
 
         #api-key-container {
-            display: none;
             margin-bottom: 20px;
             padding: 10px;
-            background-color: #f8f8f8;
-            border: 1px solid #ddd;
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
             border-radius: 5px;
         }
         
@@ -147,9 +146,59 @@
         h3 {
             font-size: 1.1em;
         }
+
+        .api-input {
+            width: 300px;
+            padding: 5px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .api-button {
+            padding: 5px 10px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        .api-button:hover {
+            background-color: #218838;
+        }
+
+        .warning {
+            color: #856404;
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
+    <!-- Configuração da API Key (sempre visível inicialmente) -->
+    <div id="api-key-container" style="display:none;">
+        <h3>Configuração da API do Google</h3>
+        <p class="warning">Para usar este motor de busca, você precisa configurar uma API Key do Google Sheets.</p>
+        <label for="api-key">Google API Key:</label>
+        <input id="api-key" class="api-input" type="password" placeholder="Cole sua API Key aqui">
+        <button class="api-button" onclick="saveApiKey()">Salvar API Key</button>
+        <button class="api-button" onclick="testConnection()">Testar Conexão</button>
+        <p><small>Esta API Key será salva apenas localmente no seu navegador.</small></p>
+        <div style="margin-top: 10px;">
+            <details>
+                <summary style="cursor: pointer; color: #0066cc;">Como obter uma API Key do Google?</summary>
+                <ol style="margin-top: 10px; font-size: 0.9em;">
+                    <li>Acesse o <a href="https://console.developers.google.com/" target="_blank">Google Cloud Console</a></li>
+                    <li>Crie um novo projeto ou selecione um existente</li>
+                    <li>Ative a API "Google Sheets API"</li>
+                    <li>Vá para "Credenciais" e crie uma "API Key"</li>
+                    <li>Cole a API Key no campo acima</li>
+                </ol>
+            </details>
+        </div>
+    </div>
+
     <div class="main-container">
         <!-- Container do vídeo (lado esquerdo) -->
         <div class="video-container">
@@ -166,28 +215,28 @@
                 <h3>Informações da Base de Dados</h3>
                 <div class="info-item">
                     <span class="info-label">Total de Registros:</span>
-                    <span id="total-records" class="loading">Carregando...</span>
+                    <span id="total-records" class="loading">Configure a API Key primeiro</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">Última Atualização:</span>
-                    <span id="last-update" class="loading">Carregando...</span>
+                    <span id="last-update" class="loading">Configure a API Key primeiro</span>
                 </div>
                 <div class="info-item">
                     <span class="info-label">Status:</span>
-                    <span id="db-status" class="loading">Verificando conexão...</span>
+                    <span id="db-status" class="loading">Aguardando configuração...</span>
                 </div>
             </div>
             
             <div class="search-container">
                 <h3>Pesquisar Transcrições</h3>
                 <input id="search-terms" class="search-input" type="text" placeholder="Digite uma ou mais palavras separadas por espaço">
-                <button class="search-button" onclick="searchNocoDB()">Pesquisar</button>
+                <button class="search-button" onclick="searchGoogleSheets()">Pesquisar</button>
                 <div id="search-stats" class="search-stats"></div>
             </div>
         </div>
     </div>
 
-    <!-- Resultados da pesquisa (nova posição) -->
+    <!-- Resultados da pesquisa -->
     <div id="results-container">
         <h3>Resultados da Pesquisa:</h3>
         <ul id="results-list">
@@ -195,44 +244,91 @@
         </ul>
     </div>
 
-    <!-- API Key Container (oculto) -->
-    <div id="api-key-container">
-        <label for="api-token">Token de API NocoDB:</label>
-        <input id="api-token" type="password" size="50">
-        <button onclick="saveToken()">Salvar Token</button>
-        <p><small>Este token será salvo apenas localmente no seu navegador.</small></p>
-    </div>
-
     <script>
-  const API_TOKEN = "OQ37i9fNtS532OE_GSTzFZBqm4HFUw3apY2K1hYX";
+// Configuração do Google Sheets
+const SPREADSHEET_ID = '1bBRfxeFWlOeU4_NBZQ0ERjoXsSBVf7K7Fa9nke3RIR4';
+const SHEET_NAME = 'transcricoes já importadas'; // Ajuste se necessário
 let currentVideoId = '7xeoJnTJNbk';
-const TABLE_ID = 'moficvyqo7141sg';
+let sheetsData = [];
+
+// Função para salvar a API Key
+function saveApiKey() {
+    const apiKey = document.getElementById('api-key').value.trim();
+    if (!apiKey) {
+        alert("Por favor, insira uma API Key válida.");
+        return;
+    }
+    
+    localStorage.setItem('google_sheets_api_key', apiKey);
+    alert("API Key salva com sucesso!");
+    loadDatabaseInfo();
+}
+
+// Função para obter a API Key salva
+function getApiKey() {
+    return localStorage.getItem('google_sheets_api_key');
+}
+
+// Função para testar a conexão
+async function testConnection() {
+const apiKey = getApiKey();
+if (!apiKey) {
+    alert("Erro: API Key não encontrada.");
+    return;
+}
+
+    
+    document.getElementById('db-status').textContent = 'Testando conexão...';
+    
+    try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}!A1:A1?key=${apiKey}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`Erro HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        document.getElementById('db-status').textContent = 'Conexão bem-sucedida!';
+        loadDatabaseInfo();
+    } catch (error) {
+        console.error('Erro na conexão:', error);
+        document.getElementById('db-status').textContent = 'Erro: ' + error.message;
+    }
+}
 
 // Função para carregar informações básicas da base de dados
 async function loadDatabaseInfo() {
-    const url = `https://app.nocodb.com/api/v2/tables/${TABLE_ID}/records?limit=1`;
-    
-    document.getElementById('db-status').textContent = 'Verificando conexão...';
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        document.getElementById('db-status').textContent = 'API Key não configurada';
+        return;
+    }
+
+    document.getElementById('db-status').textContent = 'Carregando dados...';
     
     try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'xc-token': API_TOKEN,
-                'Content-Type': 'application/json'
-            }
-        });
+        // Buscar todos os dados da planilha
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}?key=${apiKey}`;
+        const response = await fetch(url);
         
         if (!response.ok) {
-            throw new Error(`Erro HTTP ${response.status}`);
+            throw new Error(`Erro HTTP ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
-        const totalRecords = data.pageInfo.totalRows || 'N/A';
+        sheetsData = data.values || [];
         
-        document.getElementById('total-records').textContent = totalRecords;
-        document.getElementById('db-status').textContent = 'Conectado';
-        document.getElementById('last-update').textContent = new Date().toLocaleString();
+        if (sheetsData.length > 1) { // Subtraindo o cabeçalho
+            const totalRecords = sheetsData.length - 1;
+            document.getElementById('total-records').textContent = totalRecords;
+            document.getElementById('db-status').textContent = 'Conectado';
+            document.getElementById('last-update').textContent = new Date().toLocaleString();
+            
+            // Ocultar o container da API Key após conexão bem-sucedida
+            document.getElementById('api-key-container').style.display = 'none';
+        } else {
+            throw new Error('Nenhum dado encontrado na transcricoes já importadas');
+        }
     } catch (error) {
         console.error('Erro ao carregar informações:', error);
         document.getElementById('db-status').textContent = 'Erro: ' + error.message;
@@ -241,12 +337,27 @@ async function loadDatabaseInfo() {
     }
 }
 
-// Função de pesquisa otimizada usando filtros da API do NocoDB
-async function searchNocoDB() {
+// Função de pesquisa usando dados do Google Sheets
+async function searchGoogleSheets() {
     const searchTerms = document.getElementById('search-terms').value.trim();
     if (!searchTerms) {
         alert("Por favor, digite um termo de pesquisa.");
         return;
+    }
+
+const apiKey = getApiKey();
+if (!apiKey) {
+    alert("Erro: API Key não encontrada.");
+    return;
+}
+
+
+    if (sheetsData.length === 0) {
+        await loadDatabaseInfo();
+        if (sheetsData.length === 0) {
+            alert("Não foi possível carregar os dados da transcricoes já importadas.");
+            return;
+        }
     }
 
     const searchArray = searchTerms.toLowerCase().split(/\s+/);
@@ -254,39 +365,40 @@ async function searchNocoDB() {
     resultsList.innerHTML = '<li>Pesquisando...</li>';
 
     try {
-        // Construir o filtro 'where' para buscar na coluna Transcrição
-        // Usamos o operador ~ (LIKE) para buscar substring
-        const whereClause = searchArray.map(term => `(Transcrição,like,%${term}%)`).join('~and~');
-        const url = `https://app.nocodb.com/api/v2/tables/${TABLE_ID}/records?where=${encodeURIComponent(whereClause)}&limit=100`;
-
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'xc-token': API_TOKEN,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Erro HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        const records = data.list || [];
+        // Assumindo que a estrutura da transcricoes já importadas é:
+        // Coluna A: Timestamp
+        // Coluna B: Transcrição  
+        // Coluna C: Titulo - Video
+        // Coluna D: URL_LINK
+        
+        const headers = sheetsData[0] || [];
+        const dataRows = sheetsData.slice(1);
+        
+        // Encontrar os índices das colunas
+        const timestampIndex = headers.findIndex(h => h.includes('Timestamp') || h.includes('timestamp'));
+        const transcriptionIndex = headers.findIndex(h => h.includes('Transcrição') || h.includes('transcri'));
+        const titleIndex = headers.findIndex(h => h.includes('Titulo') || h.includes('título'));
+        const urlIndex = headers.findIndex(h => h.includes('URL') || h.includes('url'));
+        
+        // Filtrar resultados baseados nos termos de pesquisa
+        const results = dataRows.filter(row => {
+            const transcription = row[transcriptionIndex] || '';
+            return searchArray.every(term => 
+                transcription.toLowerCase().includes(term)
+            );
+        }).map(row => ({
+            timestamp: row[timestampIndex] || '',
+            transcription: row[transcriptionIndex] || '',
+            videoTitle: row[titleIndex] || '',
+            urlLink: row[urlIndex] || ''
+        }));
 
         resultsList.innerHTML = '';
 
-        if (records.length === 0) {
+        if (results.length === 0) {
             resultsList.innerHTML = '<li>Nenhum resultado encontrado para os termos pesquisados.</li>';
             return;
         }
-
-        const results = records.map(record => ({
-            transcription: record.Transcrição,
-            videoTitle: record["Titulo - Video"] || record.cdbm64cf0u4hnrx,
-            urlLink: record.URL_LINK,
-            timestamp: record.Timestamp
-        }));
 
         results.forEach(result => {
             const listItem = document.createElement('li');
@@ -322,8 +434,9 @@ async function searchNocoDB() {
             resultsList.appendChild(listItem);
         });
 
-        resultsList.insertAdjacentHTML('beforebegin', 
-            `<p>Encontrados ${results.length} resultados.</p>`);
+       // Atualizar número de resultados (substitui o anterior)
+document.getElementById('search-stats').textContent = `Encontrados ${results.length} resultados.`;
+
 
     } catch (error) {
         console.error('Erro na pesquisa:', error);
@@ -331,7 +444,7 @@ async function searchNocoDB() {
     }
 }
 
-// Funções auxiliares permanecem iguais
+// Funções auxiliares (mantidas do código original)
 function extractTimestamp(url) {
     if (!url) return 0;
     const match = url.match(/[?&](t|start)=(\d+)/);
@@ -391,17 +504,34 @@ function seekVideo(videoId, seconds) {
 
 // Inicialização
 window.onload = function() {
+    // Forçar a chave Google automaticamente se não estiver definida
+    let savedApiKey = getApiKey();
+    if (!savedApiKey) {
+        savedApiKey = 'AIzaSyCt9dahQtheHGOdPg944JP7npZvUM7CFSI';
+        localStorage.setItem('google_sheets_api_key', savedApiKey);
+    }
+
+    // Esconder sempre o painel de configuração
+    document.getElementById('api-key-container').style.display = 'none';
+
+    // Carregar a base de dados
     loadDatabaseInfo();
+
+    // Se houver parâmetro ?q=, executar pesquisa automática
     const params = new URLSearchParams(window.location.search);
     const query = params.get('q');
     if (query) {
         document.getElementById('search-terms').value = query;
-        searchNocoDB();
+        setTimeout(() => searchGoogleSheets(), 1000);
     }
 };
 
+
+
+
+// Event listener para pesquisar com Enter
 document.getElementById('search-terms').addEventListener('keypress', e => {
-    if (e.key === 'Enter') searchNocoDB();
+    if (e.key === 'Enter') searchGoogleSheets();
 });
     </script>
 </body>
